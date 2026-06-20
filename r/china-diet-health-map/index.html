@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中国饮食健康地形图 · 怪研所 ODD LAB</title>
+<style>
+  :root{
+    --canvas:#0e1418; --panel:#161e24; --panel2:#1b242b;
+    --line:rgba(255,255,255,.08); --line2:rgba(255,255,255,.14);
+    --ink:#e9eef1; --sub:#9aa7b0; --mut:#6b7884;
+    --accent:#46c2d6;
+    --h1:#2fb79a; --h2:#7cbf57; --h3:#e3b13c; --h4:#df7d3c; --h5:#d04a40;
+    --tile-ink:#0c1216;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--canvas);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  body{line-height:1.5;padding:clamp(14px,3vw,34px)}
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* 返回怪研所 */
+  .lab-back{display:inline-flex;align-items:center;gap:.5em;margin:0 0 18px;
+    font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);text-decoration:none;border:1px solid var(--line2);
+    padding:7px 13px;border-radius:999px;transition:all .2s ease}
+  .lab-back:hover{color:var(--canvas);background:var(--accent);border-color:var(--accent)}
+  .lab-back b{font-weight:700;letter-spacing:.06em}
+
+  /* header */
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--accent);margin:0 0 10px}
+  h1{font-size:clamp(24px,4.4vw,42px);font-weight:800;letter-spacing:-.02em;margin:0;line-height:1.05}
+  h1 .en{display:block;font-size:clamp(11px,1.5vw,14px);font-weight:500;letter-spacing:.04em;color:var(--sub);margin-top:8px;font-family:var(--mono);text-transform:uppercase}
+  .thesis{max-width:760px;color:var(--sub);font-size:clamp(13px,1.6vw,15px);margin:16px 0 0}
+  .vintage{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:10px;letter-spacing:.02em}
+
+  .rule{height:1px;background:var(--line);margin:24px 0}
+
+  /* controls */
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:6px}
+  .ctl-label{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);margin-right:6px}
+  .toggle{appearance:none;border:1px solid var(--line2);background:transparent;color:var(--sub);
+    font-family:var(--sans);font-size:13px;font-weight:600;padding:7px 13px;border-radius:999px;cursor:pointer;
+    transition:all .18s ease}
+  .toggle:hover{color:var(--ink);border-color:var(--accent)}
+  .toggle[aria-pressed="true"]{background:var(--accent);color:#04171b;border-color:var(--accent)}
+  .hint{font-size:12px;color:var(--mut);margin:8px 0 18px;font-style:italic}
+
+  /* layout */
+  .stage{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,1fr);gap:22px;align-items:start}
+  @media(max-width:880px){.stage{grid-template-columns:1fr}}
+
+  /* map */
+  .mapcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 16px 14px;position:relative}
+  .mapscroll{overflow-x:auto;padding-bottom:4px}
+  .compass{position:relative}
+  .cmp{position:absolute;font-family:var(--mono);font-size:10px;letter-spacing:.2em;color:var(--mut);pointer-events:none;z-index:2}
+  .cmp.n{top:-2px;left:50%;transform:translateX(-50%)}
+  .cmp.s{bottom:-2px;left:50%;transform:translateX(-50%)}
+  .cmp.w{top:50%;left:-2px;transform:translateY(-50%) rotate(-90deg);transform-origin:left}
+  .cmp.e{top:50%;right:-2px;transform:translateY(-50%) rotate(90deg);transform-origin:right}
+  .grid{display:grid;grid-template-columns:repeat(11,1fr);grid-auto-rows:1fr;gap:6px;min-width:600px;padding:14px 18px}
+  .tile{position:relative;border:none;border-radius:7px;cursor:pointer;color:var(--tile-ink);
+    font-family:var(--sans);font-weight:700;font-size:13px;letter-spacing:.01em;
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    aspect-ratio:1/.86;min-height:0;padding:2px;
+    transition:background-color .45s cubic-bezier(.4,0,.2,1), transform .14s ease, box-shadow .14s ease, opacity .5s ease;
+    opacity:0;outline:none}
+  .tile:hover{transform:translateY(-2px)}
+  .tile:focus-visible{box-shadow:0 0 0 2px var(--canvas),0 0 0 4px var(--accent)}
+  .tile.locked{box-shadow:0 0 0 2px var(--canvas),0 0 0 4px var(--accent)}
+  .tile .coast{position:absolute;top:3px;right:3px;width:4px;height:4px;border-radius:50%;background:rgba(12,18,22,.45)}
+  .tile small{font-weight:600;font-size:10px;opacity:.7}
+
+  /* legend */
+  .legend{display:flex;align-items:center;gap:0;margin-top:14px;flex-wrap:wrap}
+  .legend .scale{display:flex;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+  .legend .sw{width:34px;height:14px}
+  .legend .ends{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--mut);width:170px;margin-left:10px;letter-spacing:.04em}
+  .legcap{font-family:var(--mono);font-size:11px;color:var(--sub);margin-left:14px;letter-spacing:.02em}
+
+  /* inspector */
+  .inspector{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;position:sticky;top:18px}
+  @media(max-width:880px){.inspector{position:static}}
+  .ins-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+  .ins-name{font-size:23px;font-weight:800;letter-spacing:-.01em;margin:0}
+  .ins-label{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.08em;text-transform:uppercase;margin-top:3px}
+  .badge{flex:0 0 auto;width:54px;height:54px;border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--tile-ink);font-weight:800}
+  .badge .lt{font-size:24px;line-height:1}
+  .badge .tx{font-size:9px;font-weight:700;letter-spacing:.04em;margin-top:1px}
+
+  .axes{margin:18px 0 4px}
+  .axis{margin-bottom:11px}
+  .axis-head{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+  .axis-head .nm{color:var(--sub);font-weight:600}
+  .axis-head .vl{font-family:var(--mono);color:var(--mut);font-size:11px}
+  .track{height:7px;border-radius:4px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
+  .fill{height:100%;border-radius:4px;transition:width .5s ease,background-color .5s ease}
+
+  .field{border-top:1px solid var(--line);padding:12px 0 0;margin-top:13px}
+  .field:first-of-type{margin-top:16px}
+  .field .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);margin-bottom:4px}
+  .field .v{font-size:13.5px;color:var(--ink)}
+  .field .v.order{color:#9fe0c8}
+  .field .v.avoid{color:#f0b0a6}
+  .note{margin-top:14px;font-size:12.5px;color:var(--sub);background:var(--panel2);border-left:2px solid var(--accent);padding:10px 12px;border-radius:0 6px 6px 0}
+
+  /* footer */
+  .foot{margin-top:26px;border-top:1px solid var(--line);padding-top:16px;color:var(--mut);font-size:12px;line-height:1.65}
+  .foot b{color:var(--sub);font-weight:600}
+  .foot .axes-note{font-family:var(--mono);font-size:11px;color:var(--mut);margin-top:8px}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}.tile{opacity:1!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a class="lab-back" href="/">← 怪研所 · <b>ODD LAB</b></a>
+
+  <p class="eyebrow">Ecological · Structural · 非因果</p>
+  <h1>中国饮食健康地形图
+    <span class="en">A data-grounded dietary-health map of China</span>
+  </h1>
+  <p class="thesis">把"哪个菜系最健康"翻译成可测量的问题:用 6 条横切变量(钠 / 腌腊致癌 / 烹饪法 / 精制碳水 / 蔬果发酵 / 优质蛋白)给各地"日常吃法"评级,再用各省癌症登记与预期寿命交叉验证。结论:健康度与"有没有菜系"无关——切换下方维度,看同一张地图如何重新着色,模式就在其中。</p>
+  <p class="vintage">数据:糖尿病/癌症登记 2018–2025 · 预期寿命 2020 七普 · CKB / 柳叶刀 / 国家癌症中心 · 生态学关联,非因果推断</p>
+
+  <div class="rule"></div>
+
+  <div class="controls" role="group" aria-label="选择着色维度">
+    <span class="ctl-label">着色维度</span>
+    <button class="toggle" data-dim="comp" aria-pressed="true">综合健康</button>
+    <button class="toggle" data-dim="na" aria-pressed="false">钠负荷</button>
+    <button class="toggle" data-dim="gi" aria-pressed="false">主食GI · 精制碳水</button>
+    <button class="toggle" data-dim="cancer" aria-pressed="false">腌腊 → 消化道癌</button>
+  </div>
+  <p class="hint">点任意板块查看明细 · 切换维度时北方"钠/碳水"会整片泛红,而"腌腊致癌"会点亮苏粤闽辽——这就是洞见。</p>
+
+  <div class="stage">
+    <div class="mapcard">
+      <div class="mapscroll">
+        <div class="compass">
+          <span class="cmp n">北 N</span><span class="cmp s">南 S</span>
+          <span class="cmp w">西 W</span><span class="cmp e">东 E</span>
+          <div class="grid" id="grid"></div>
+        </div>
+      </div>
+      <div class="legend">
+        <div class="scale" aria-hidden="true">
+          <div class="sw" style="background:var(--h1)"></div>
+          <div class="sw" style="background:var(--h2)"></div>
+          <div class="sw" style="background:var(--h3)"></div>
+          <div class="sw" style="background:var(--h4)"></div>
+          <div class="sw" style="background:var(--h5)"></div>
+        </div>
+        <div class="ends"><span id="legLo">健康</span><span id="legHi">最重</span></div>
+        <span class="legcap" id="legCap">S 最健康 → D 最重</span>
+      </div>
+    </div>
+
+    <aside class="inspector" id="inspector" aria-live="polite"></aside>
+  </div>
+
+  <div class="foot">
+    <b>怎么读这张图。</b> 每个板块按地理位置示意摆放(<b>非精确政治地图</b>),颜色 = 所选维度的风险/健康等级。八大菜系核心省 + 河南 + 云南为<b>数据锚定</b>(有省级癌症登记与流行病学支撑);其余省份为基于已知日常饮食模式的<b>最佳估计</b>,深度较低。
+    <div class="axes-note">⚠ 预期寿命由经济发展与医疗主导,不归因于菜系(上海/香港最长寿是财富与制度,非本帮/粤菜之功)。生态学关联 ≠ 因果;个体风险取决于你实际点的那道菜与那碗主食。</div>
+  </div>
+
+</div>
+
+<script>
+const HEAT=['#2fb79a','#7cbf57','#e3b13c','#df7d3c','#d04a40'];
+const TIER_L=['S','A','B','C','D'];
+const TIER_T=['最健康','较健康','中间','偏重','最重'];
+const RISK_T=['低','偏低','中','偏高','极高'];
+
+// tier: 0=S(最健康)…4=D(最重) | na/gi/cancer: 1(低)…5(极高) | r,c: 地理示意网格(1-indexed)
+const DATA=[
+ {id:'hlj',n:'黑龙江',lab:'东北菜',r:1,c:10,tier:4,na:4,gi:4,cancer:4,staple:'米/面(大份),冬储腌渍',dis:'东北腌渍重口;酸菜亚硝胺',order:'炖菜多配菜·杂粮',avoid:'酸菜·腌渍·重盐',note:''},
+ {id:'jl',n:'吉林',lab:'东北菜',r:2,c:10,tier:4,na:4,gi:4,cancer:4,staple:'米/面',dis:'东北酸菜/腌渍',order:'炖菜配菜',avoid:'酸菜·腌渍·大份主食',note:''},
+ {id:'ln',n:'辽宁',lab:'东北菜 · 沿海',r:3,c:9,coast:1,tier:4,na:4,gi:4,cancer:5,staple:'米/面(大份)',dis:'胃癌高发(庄河咸猪肉);酸菜亚硝胺',order:'炖菜多配菜·少酸菜',avoid:'咸猪肉·酸菜·大份主食',note:'庄河是全国胃癌代表高发点'},
+ {id:'nmg',n:'内蒙古',lab:'蒙餐',r:1,c:7,tier:3,na:4,gi:3,cancer:3,staple:'莜面/荞麦(杂粮)+牛羊奶肉',dis:'牛羊奶肉为主',order:'牛羊奶·莜面杂粮',avoid:'过咸·腌制',note:'杂粮+奶肉结构有亮点'},
+ {id:'bj',n:'北京',lab:'京菜',r:1,c:8,tier:3,na:4,gi:5,cancer:3,staple:'炸酱面/烤鸭饼(白面,高GI)',dis:'北方高盐高GI',order:'涮羊肉配大量菜·烤鸭少饼',avoid:'炸酱面·酱重',note:''},
+ {id:'tj',n:'天津',lab:'津菜',r:2,c:9,coast:1,tier:3,na:4,gi:5,cancer:3,staple:'煎饼果子/面食',dis:'北方面食带',order:'海鲜·多配菜',avoid:'大碗面·重油早点',note:''},
+ {id:'xj',n:'新疆',lab:'新疆菜',r:2,c:2,tier:3,na:3,gi:4,cancer:3,staple:'馕/拉条子(白面,高GI)',dis:'烧烤(PAH);牛羊肉/瓜果加分',order:'牛羊肉·瓜果·抓饭少油',avoid:'大量馕·重烧烤',note:''},
+ {id:'sx',n:'山西',lab:'晋菜',r:2,c:7,tier:3,na:4,gi:3,cancer:3,staple:'莜面/荞麦/小米(杂粮,低GI,加分)+陈醋',dis:'杂粮传统救分;但偏咸',order:'莜面·荞麦·小米杂粮',avoid:'过咸·过油',note:'北方杂粮传统是隐藏加分项'},
+ {id:'he',n:'河北',lab:'冀菜',r:2,c:8,tier:4,na:5,gi:5,cancer:4,staple:'馒头/面(高GI)',dis:'磁县食管癌高发(太行带);高盐卒中',order:'杂粮·多吃菜',avoid:'重盐·腌菜·大碗白面',note:'太行食管癌带边缘'},
+ {id:'nx',n:'宁夏',lab:'西北菜',r:2,c:6,tier:3,na:4,gi:4,cancer:3,staple:'面食',dis:'牛羊为主',order:'牛羊肉·杂粮',avoid:'大碗白面·重盐',note:''},
+ {id:'qh',n:'青海',lab:'西北菜',r:3,c:3,tier:3,na:4,gi:3,cancer:4,staple:'糌粑(青稞,低GI,加分)/面',dis:'胃癌高发(西北)',order:'青稞·牛羊肉',avoid:'重盐·腌制',note:'糌粑=青稞,低GI是亮点'},
+ {id:'gs',n:'甘肃',lab:'西北菜',r:3,c:4,tier:4,na:4,gi:4,cancer:5,staple:'拉面/面食',dis:'胃癌发病率全国前列(武威);恶性肿瘤居首',order:'牛羊肉·杂粮·瓜果',avoid:'重盐腌制·大碗白面',note:'甘青胃癌列当地癌症首位'},
+ {id:'sn',n:'陕西',lab:'陕菜',r:3,c:6,tier:3,na:4,gi:5,cancer:3,staple:'biangbiang面/泡馍/白面(高GI)',dis:'关中面食带',order:'杂粮·羊肉·配菜',avoid:'大碗白面·油泼重油',note:''},
+ {id:'ha',n:'河南',lab:'豫菜 · 无八大席位',r:3,c:7,tier:4,na:4,gi:5,cancer:5,staple:'烩面/馒头/胡辣汤+油馍头(精制小麦,高GI+油炸)',dis:'食管癌历史全球震中(林县120/10万,占死因20%)',order:'主食掺杂粮·先吃菜与蛋白',avoid:'油馍头·大碗白馒头·重盐',note:'没菜系席位,却是实际最差之一——证明菜系≠健康'},
+ {id:'sd',n:'山东',lab:'鲁菜 · 沿海',r:3,c:8,coast:1,tier:4,na:5,gi:5,cancer:4,staple:'馒头(GI88)/面',dis:'高血压·卒中(全国最高盐12.5g);胃癌(临朐);食管癌带',order:'胶东清蒸海鲜',avoid:'重酱爆炒·酥锅·蘸酱减半',note:'仅胶东海鲜支清淡;钠+高GI主食双重打击'},
+ {id:'xz',n:'西藏',lab:'藏餐',r:4,c:2,tier:3,na:3,gi:3,cancer:3,staple:'糌粑(青稞,低GI)/牛羊',dis:'蔬果极少(高原);食管癌率低',order:'青稞·牛羊肉',avoid:'酥油过量',note:'预期寿命全国最低=海拔/发展,非饮食'},
+ {id:'sc',n:'四川',lab:'川菜 · 杠铃型',r:4,c:4,tier:2,na:4,gi:4,cancer:4,staple:'白米饭/米线',dis:'食管癌全国第二(南充/盐亭);自贡盐帮重盐',order:'蒜泥白肉·清炒时蔬·豆花',avoid:'水煮系列·毛血旺·老油火锅;涮烫别趁烫',note:'上行(蔬果/发酵/辣)对冲下行(油/盐/烫)'},
+ {id:'cq',n:'重庆',lab:'渝菜 · 下河帮',r:4,c:5,tier:3,na:4,gi:4,cancer:3,staple:'白米/小面',dis:'火锅重油;食管癌偏高',order:'清淡江湖菜·豆花',avoid:'老油火锅·重油重辣',note:''},
+ {id:'hb',n:'湖北',lab:'鄂菜 · 无八大席位',r:4,c:6,tier:2,na:3,gi:4,cancer:3,staple:'热干面(白面碳水)/淡水鱼/藕',dis:'中性',order:'清蒸鱼·莲藕排骨汤',avoid:'热干面过量·重油',note:''},
+ {id:'ah',n:'安徽',lab:'徽菜',r:4,c:7,tier:3,na:3,gi:4,cancer:4,staple:'白米/面',dis:'皖北食管癌;火腿/臭鳜鱼(腌)',order:'山珍菌菇·春笋',avoid:'火腿炖菜·臭鳜鱼配重油',note:''},
+ {id:'js',n:'江苏',lab:'苏菜(淮扬)',r:4,c:8,coast:1,tier:2,na:3,gi:4,cancer:5,staple:'白米饭',dis:'食管癌死亡率全国第一(21.62/10万);胃癌(盐城);肝癌(启东)',order:'清炖狮子头·白灼',avoid:'浓油赤酱加糖·苏北腌货',note:'淮扬精细 ≠ 苏北日常;品牌与实际落差最大'},
+ {id:'sh',n:'上海',lab:'本帮菜',r:4,c:9,coast:1,tier:2,na:4,gi:4,cancer:2,staple:'白米饭',dis:'发达地区,癌症负担相对低',order:'清蒸河鲜·白灼时蔬',avoid:'浓油赤酱·糖重(本帮甜)',note:'预期寿命全国第一~82.6=财富/医疗,非饮食'},
+ {id:'yn',n:'云南',lab:'滇菜 · 无八大席位',r:5,c:4,tier:0,na:2,gi:3,cancer:3,staple:'米线(GI高)/米饭/部分薯类',dis:'相对低(登记数据较少)',order:'野菜·野生菌(务必煮熟)·清蒸·新鲜香料',avoid:'宣威火腿·重烧烤·米线过量',note:'没席位却可能全国最健康:植物/菌类多样性顶级+发酵'},
+ {id:'gz',n:'贵州',lab:'黔菜',r:5,c:5,tier:2,na:3,gi:4,cancer:3,staple:'米/米粉',dis:'酸汤发酵是亮点;但有腌制',order:'酸汤(发酵)·折耳根·鲜辣小炒',avoid:'腌腊·重盐',note:'酸汤发酵+鲜辣有加分'},
+ {id:'hn',n:'湖南',lab:'湘菜',r:5,c:6,tier:3,na:4,gi:4,cancer:2,staple:'白米饭',dis:'食管癌死亡率全国最低之一(鲜辣/蔬菜对冲);但高盐→心血管隐患',order:'剁椒鱼头(蒸)·鲜辣小炒',avoid:'腊味合蒸·熏肉',note:'纸面差,但消化道癌数据意外好'},
+ {id:'jx',n:'江西',lab:'赣菜 · 无八大席位',r:5,c:7,tier:3,na:4,gi:4,cancer:4,staple:'白米饭',dis:'鼻咽癌偏高;辣油盐腌',order:'鲜辣小炒·清蒸',avoid:'腌腊·重油重盐',note:''},
+ {id:'zj',n:'浙江',lab:'浙菜 · 沿海',r:5,c:8,coast:1,tier:2,na:3,gi:4,cancer:3,staple:'白米饭',dis:'沿海胃癌;甲状腺癌发病第2',order:'清蒸东海鲜',avoid:'东坡肉·糖醋·咸蟹/霉干菜扣肉',note:'省预期寿命~80.8=发达,非菜系之功'},
+ {id:'gx',n:'广西',lab:'桂菜',r:6,c:5,tier:3,na:3,gi:4,cancer:4,staple:'米粉/螺蛳粉',dis:'鼻咽癌高(梧州)',order:'清淡米粉配菜·清蒸',avoid:'咸鱼腊味·腌制',note:''},
+ {id:'gd',n:'广东',lab:'粤菜(广府)· 沿海',r:6,c:6,coast:1,tier:1,na:2,gi:4,cancer:4,staple:'白米饭/白粥(GI高)',dis:'鼻咽癌全国第一占60%(~10.5/10万,2009);潮汕食管癌',order:'清蒸鱼·白灼时蔬·白切鸡',avoid:'咸鱼蒸肉饼·过多烧腊·白粥',note:'广府清蒸支可达S档;咸鱼/烧腊是隐藏左尾'},
+ {id:'fj',n:'福建',lab:'闽菜 · 沿海',r:6,c:7,coast:1,tier:2,na:3,gi:4,cancer:4,staple:'白米饭/米粉',dis:'胃癌高发(长乐:虾油/鱼露/咸鱼);食管癌(闽南)',order:'清蒸海鲜·红糟菜',avoid:'鱼露重的·咸鱼干',note:'红曲发酵(天然他汀)是亮点'},
+ {id:'tw',n:'台湾',lab:'台菜 · 沿海',r:6,c:8,coast:1,tier:2,na:3,gi:4,cancer:3,staple:'白米饭/卤肉饭',dis:'海鲜清淡 vs 夜市油炸',order:'清蒸海鲜·烫青菜',avoid:'卤肉饭·油炸夜市',note:''},
+ {id:'hi',n:'海南',lab:'琼菜 · 沿海',r:7,c:5,coast:1,tier:1,na:2,gi:4,cancer:2,staple:'白米饭',dis:'清淡海鲜+热带水果,负担较低',order:'清蒸海鲜·热带水果·文昌鸡',avoid:'过量白米饭',note:'清淡/海鲜/果蔬,相对健康'}
+];
+
+const grid=document.getElementById('grid');
+const inspector=document.getElementById('inspector');
+const legCap=document.getElementById('legCap');
+const legLo=document.getElementById('legLo');
+const legHi=document.getElementById('legHi');
+let dim='comp';
+let lockedId='gd';
+let hoverId=null;
+
+function levelFor(d,di){ return di==='comp' ? d.tier+1 : d[di]; }
+function colorFor(d,di){ return HEAT[levelFor(d,di)-1]; }
+
+// build tiles
+const tiles={};
+DATA.forEach((d,i)=>{
+  const b=document.createElement('button');
+  b.className='tile';
+  b.style.gridColumn=d.c;
+  b.style.gridRow=d.r;
+  b.setAttribute('data-id',d.id);
+  b.setAttribute('aria-label',d.n+' '+d.lab);
+  b.innerHTML=d.n + (d.coast?'<span class="coast"></span>':'');
+  b.addEventListener('mouseenter',()=>{hoverId=d.id;render();});
+  b.addEventListener('mouseleave',()=>{hoverId=null;render();});
+  b.addEventListener('focus',()=>{hoverId=d.id;render();});
+  b.addEventListener('blur',()=>{hoverId=null;render();});
+  b.addEventListener('click',()=>{lockedId=d.id;render();});
+  grid.appendChild(b);
+  tiles[d.id]=b;
+  // staggered fade-in
+  setTimeout(()=>{b.style.opacity='1';}, 120 + i*18);
+});
+
+function paintTiles(){
+  DATA.forEach(d=>{
+    const t=tiles[d.id];
+    t.style.background=colorFor(d,dim);
+    t.classList.toggle('locked', d.id===lockedId);
+  });
+}
+
+function bar(name,lvl){
+  return `<div class="axis">
+    <div class="axis-head"><span class="nm">${name}</span><span class="vl">${RISK_T[lvl-1]} · ${lvl}/5</span></div>
+    <div class="track"><div class="fill" style="width:${lvl*20}%;background:${HEAT[lvl-1]}"></div></div>
+  </div>`;
+}
+
+function renderInspector(){
+  const d=DATA.find(x=>x.id===(hoverId||lockedId));
+  const col=HEAT[d.tier];
+  inspector.innerHTML=`
+    <div class="ins-top">
+      <div>
+        <p class="ins-name">${d.n}</p>
+        <div class="ins-label">${d.lab}</div>
+      </div>
+      <div class="badge" style="background:${col}">
+        <span class="lt">${TIER_L[d.tier]}</span><span class="tx">${TIER_T[d.tier]}</span>
+      </div>
+    </div>
+    <div class="axes">
+      ${bar('钠负荷',d.na)}
+      ${bar('主食GI · 精制碳水',d.gi)}
+      ${bar('腌腊 → 消化道癌',d.cancer)}
+    </div>
+    <div class="field"><div class="k">日常主食</div><div class="v">${d.staple}</div></div>
+    <div class="field"><div class="k">主导机制 / 疾病</div><div class="v">${d.dis}</div></div>
+    <div class="field"><div class="k">点这个</div><div class="v order">${d.order}</div></div>
+    <div class="field"><div class="k">避这个</div><div class="v avoid">${d.avoid}</div></div>
+    ${d.note?`<div class="note">${d.note}</div>`:''}
+  `;
+}
+
+function renderLegend(){
+  if(dim==='comp'){ legLo.textContent='健康'; legHi.textContent='最重'; legCap.textContent='S 最健康 → D 最重(综合6轴)'; }
+  else{ legLo.textContent='低'; legHi.textContent='极高';
+    const m={na:'钠负荷',gi:'主食GI / 精制碳水',cancer:'腌腊 → 消化道癌风险'};
+    legCap.textContent='低 → 极高 · '+m[dim];
+  }
+}
+
+function render(){ paintTiles(); renderInspector(); renderLegend(); }
+
+document.querySelectorAll('.toggle').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    dim=btn.getAttribute('data-dim');
+    document.querySelectorAll('.toggle').forEach(b=>b.setAttribute('aria-pressed', b===btn?'true':'false'));
+    render();
+  });
+});
+
+render();
+</script>
+</body>
+</html>
