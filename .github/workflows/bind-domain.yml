@@ -1,0 +1,60 @@
+name: bind-domain
+
+# 一次性把自定义子域名 odd.ai98.club 绑到 Pages 项目（手动触发）。
+# 需要先跑过 deploy（项目已存在）+ 配好 CLOUDFLARE_API_TOKEN。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROJECT: oddlab-wen98
+  DOMAIN: odd.ai98.club
+  ZONE: ai98.club
+
+jobs:
+  bind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 绑定 odd.ai98.club → Pages
+        env:
+          CF_TOKEN_RAW: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCT_RAW: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -e
+          TOKEN=$(printf '%s' "$CF_TOKEN_RAW" | LC_ALL=C tr -cd '[:graph:]')
+          if [ -z "$TOKEN" ]; then
+            echo "::error::尚未配置 CLOUDFLARE_API_TOKEN，先配好再触发本工作流。"
+            exit 1
+          fi
+          echo "::add-mask::$TOKEN"
+          ACCT=$(printf '%s' "$CF_ACCT_RAW" | LC_ALL=C tr -cd '[:graph:]' | tr 'A-Z' 'a-z')
+          echo "::add-mask::$ACCT"
+          API=https://api.cloudflare.com/client/v4
+          AUTH="Authorization: Bearer $TOKEN"
+
+          echo "▶ 1/3 查 zone id（$ZONE）"
+          ZID=$(curl -s -H "$AUTH" "$API/zones?name=$ZONE" | jq -r '.result[0].id // empty')
+          if [ -n "$ZID" ]; then
+            echo "::add-mask::$ZID"
+            echo "  ✓ 拿到 zone id"
+            echo "▶ 2/3 建 DNS CNAME（$DOMAIN → $PROJECT.pages.dev，proxied；已存在则忽略）"
+            curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
+              "$API/zones/$ZID/dns_records" \
+              --data "{\"type\":\"CNAME\",\"name\":\"$DOMAIN\",\"content\":\"$PROJECT.pages.dev\",\"proxied\":true}" \
+              | jq -r 'if .success then "  ✓ DNS 记录已建" else "  · DNS: " + ([.errors[]?.message] | join("; ")) end'
+          else
+            echo "  · 没拿到 zone id（token 可能缺 Zone:Read）；DNS 记录可能需在面板手动加。"
+          fi
+
+          echo "▶ 3/3 把自定义域名挂到 Pages 项目（$PROJECT）"
+          curl -s -X POST -H "$AUTH" -H "Content-Type: application/json" \
+            "$API/accounts/$ACCT/pages/projects/$PROJECT/domains" \
+            --data "{\"name\":\"$DOMAIN\"}" \
+            | jq -r 'if .success then "  ✓ 已挂到 Pages（证书自动签发，几分钟内生效）" else "  · Pages: " + ([.errors[]?.message] | join("; ")) end'
+
+          echo "▶ 验证当前状态"
+          curl -s -H "$AUTH" "$API/accounts/$ACCT/pages/projects/$PROJECT/domains" \
+            | jq -r '.result[]? | "  - " + .name + " : " + (.status // "?")'
+          echo "::notice::完成。若状态非 active，等几分钟证书签发，或到面板 Pages → $PROJECT → Custom domains 看进度。"
